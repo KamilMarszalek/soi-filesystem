@@ -419,7 +419,7 @@ int removeFile(const char *diskName, const char *fileName) {
     printf("Plik '%s' (inode=%d) usunięty.\n", fileName, foundInode);
     return 0;
 }
-int listFiles(const char *diskName) {
+int listAllFiles(const char *diskName) {
     FILE *fp = fopen(diskName, "rb");
     if (!fp) {
         fprintf(stderr, "Nie można otworzyć %s\n", diskName);
@@ -437,6 +437,33 @@ int listFiles(const char *diskName) {
             if (ino.isUsed == 1) {
                 printf("  inode=%d, nazwa='%s', rozmiar=%d bajtów, fragmentsCount=%d\n",
                        i, ino.fileName, ino.fileSize, ino.fragmentsCount);
+            }
+        }
+    }
+    fclose(fp);
+    return 0;
+}
+
+int listFiles(const char *diskName) {
+        FILE *fp = fopen(diskName, "rb");
+    if (!fp) {
+        fprintf(stderr, "Nie można otworzyć %s\n", diskName);
+        return -1;
+    }
+    SuperBlock sb;
+    if (readSuperBlock(fp, &sb) < 0) {
+        fclose(fp);
+        return -1;
+    }
+    printf("Katalog:\n");
+    for (int i = 0; i < sb.inodeCount; i++) {
+        Inode ino;
+        if (readInode(fp, &sb, i, &ino) == 0) {
+            if (ino.isUsed == 1) {
+                if (ino.fileName[0] != '.') {
+                    printf("  inode=%d, nazwa='%s', rozmiar=%d bajtów, fragmentsCount=%d\n",
+                       i, ino.fileName, ino.fileSize, ino.fragmentsCount);
+                }
             }
         }
     }
@@ -498,6 +525,7 @@ int main(int argc, char *argv[]) {
             "  copyin <diskFile> <srcFile> <destName>\n"
             "  copyout <diskFile> <fileName> <outFile>\n"
             "  ls <diskFile>\n"
+            "  ls -a <diskFile>\n"
             "  rm <diskFile> <fileName>\n"
             "  map <diskFile>\n"
             "  rmdisk <diskFile>\n",
@@ -536,6 +564,12 @@ int main(int argc, char *argv[]) {
             return 1;
         }
         return listFiles(argv[2]);
+    } else if (strcmp(cmd, "ls -a") == 0) {
+        if (argc < 3) {
+            fprintf(stderr, "Użycie: ls <diskFile>\n");
+            return 1;
+        }
+        return listAllFiles(argv[2]);
 
     } else if (strcmp(cmd, "rm") == 0) {
         if (argc < 4) {
