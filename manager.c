@@ -34,29 +34,29 @@ typedef struct {
 } SuperBlock;
 
 
-int readSuperBlock(FILE *fp, SuperBlock *sb) {
+int readSuperBlock(FILE *fp, SuperBlock *superBlock) {
     fseek(fp, 0, SEEK_SET);
-    if (fread(sb, sizeof(SuperBlock), 1, fp) != 1) {
+    if (fread(superBlock, sizeof(SuperBlock), 1, fp) != 1) {
         return -1;
     }
-    if (memcmp(sb->signature, MAGIC_STR, 4) != 0) {
+    if (memcmp(superBlock->signature, MAGIC_STR, 4) != 0) {
         fprintf(stderr, "Błędna sygnatura superbloku (nie 'MYFS').\n");
         return -1;
     }
     return 0;
 }
 
-int writeSuperBlock(FILE *fp, const SuperBlock *sb) {
+int writeSuperBlock(FILE *fp, const SuperBlock *superBlock) {
     fseek(fp, 0, SEEK_SET);
-    if (fwrite(sb, sizeof(SuperBlock), 1, fp) != 1) {
+    if (fwrite(superBlock, sizeof(SuperBlock), 1, fp) != 1) {
         return -1;
     }
     return 0;
 }
 
-int readInode(FILE *fp, const SuperBlock *sb, int idx, Inode *ino) {
-    if (idx < 0 || idx >= sb->inodeCount) return -1;
-    long offset = sb->inodeTableOffset + (long)idx * sizeof(Inode);
+int readInode(FILE *fp, const SuperBlock *superBlock, int index, Inode *ino) {
+    if (index < 0 || index >= superBlock->inodeCount) return -1;
+    long offset = superBlock->inodeTableOffset + (long)index * sizeof(Inode);
     fseek(fp, offset, SEEK_SET);
     if (fread(ino, sizeof(Inode), 1, fp) != 1) {
         return -1;
@@ -64,9 +64,9 @@ int readInode(FILE *fp, const SuperBlock *sb, int idx, Inode *ino) {
     return 0;
 }
 
-int writeInode(FILE *fp, const SuperBlock *sb, int idx, const Inode *ino) {
-    if (idx < 0 || idx >= sb->inodeCount) return -1;
-    long offset = sb->inodeTableOffset + (long)idx * sizeof(Inode);
+int writeInode(FILE *fp, const SuperBlock *superBlock, int index, const Inode *ino) {
+    if (index < 0 || index >= superBlock->inodeCount) return -1;
+    long offset = superBlock->inodeTableOffset + (long)index * sizeof(Inode);
     fseek(fp, offset, SEEK_SET);
     if (fwrite(ino, sizeof(Inode), 1, fp) != 1) {
         return -1;
@@ -74,20 +74,20 @@ int writeInode(FILE *fp, const SuperBlock *sb, int idx, const Inode *ino) {
     return 0;
 }
 
-int loadBlockMap(FILE *fp, const SuperBlock *sb, unsigned char *blockMap) {
-    fseek(fp, sb->blockBitmapOffset, SEEK_SET);
-    size_t r = fread(blockMap, 1, sb->blockCount, fp);
-    return (r == (size_t)sb->blockCount) ? 0 : -1;
+int loadBlockMap(FILE *fp, const SuperBlock *superBlock, unsigned char *blockMap) {
+    fseek(fp, superBlock->blockBitmapOffset, SEEK_SET);
+    size_t r = fread(blockMap, 1, superBlock->blockCount, fp);
+    return (r == (size_t)superBlock->blockCount) ? 0 : -1;
 }
 
-int saveBlockMap(FILE *fp, const SuperBlock *sb, const unsigned char *blockMap) {
-    fseek(fp, sb->blockBitmapOffset, SEEK_SET);
-    size_t w = fwrite(blockMap, 1, sb->blockCount, fp);
-    return (w == (size_t)sb->blockCount) ? 0 : -1;
+int saveBlockMap(FILE *fp, const SuperBlock *superBlock, const unsigned char *blockMap) {
+    fseek(fp, superBlock->blockBitmapOffset, SEEK_SET);
+    size_t w = fwrite(blockMap, 1, superBlock->blockCount, fp);
+    return (w == (size_t)superBlock->blockCount) ? 0 : -1;
 }
 
-long getBlockOffset(const SuperBlock *sb, int blockNum) {
-    return sb->dataOffset + (long)blockNum * BLOCK_SIZE;
+long getBlockOffset(const SuperBlock *superBlock, int blockNum) {
+    return superBlock->dataOffset + (long)blockNum * BLOCK_SIZE;
 }
 
 int formatDisk(const char *diskFile, long diskSize) {
@@ -121,23 +121,23 @@ int formatDisk(const char *diskFile, long diskSize) {
         return -1;
     }
 
-    SuperBlock sb;
-    memset(&sb, 0, sizeof(sb));
-    memcpy(sb.signature, MAGIC_STR, 4);
-    sb.blockCount = (int)blockCount;   
-    sb.inodeCount = inodeCount;   
-    sb.freeBlocks = (int)blockCount;   
+    SuperBlock superBlock;
+    memset(&superBlock, 0, sizeof(superBlock));
+    memcpy(superBlock.signature, MAGIC_STR, 4);
+    superBlock.blockCount = (int)blockCount;   
+    superBlock.inodeCount = inodeCount;   
+    superBlock.freeBlocks = (int)blockCount;   
 
-    sb.inodeTableOffset = (int)sizeof(SuperBlock);
-    int inodeTableOffset = sb.inodeTableOffset;
+    superBlock.inodeTableOffset = (int)sizeof(SuperBlock);
+    int inodeTableOffset = superBlock.inodeTableOffset;
     int inodeTableBytes = (int)inodeTableSize;
     
-    sb.blockBitmapOffset = inodeTableOffset + inodeTableBytes;
-    int bitmapOffset = sb.blockBitmapOffset;
+    superBlock.blockBitmapOffset = inodeTableOffset + inodeTableBytes;
+    int bitmapOffset = superBlock.blockBitmapOffset;
     int bitmapBytes = (int)blockCount;
-    sb.dataOffset = sb.blockBitmapOffset + bitmapBytes;
+    superBlock.dataOffset = superBlock.blockBitmapOffset + bitmapBytes;
 
-    long totalSize = sb.dataOffset + (long)blockCount * blockSize;
+    long totalSize = superBlock.dataOffset + (long)blockCount * blockSize;
     if (totalSize > diskSize) {
     }
 
@@ -145,7 +145,7 @@ int formatDisk(const char *diskFile, long diskSize) {
     fputc('\0', fp);
 
     fseek(fp, 0, SEEK_SET);
-    fwrite(&sb, sizeof(sb), 1, fp);
+    fwrite(&superBlock, sizeof(superBlock), 1, fp);
 
     Inode emptyInode;
     memset(&emptyInode, 0, sizeof(emptyInode));
@@ -156,13 +156,13 @@ int formatDisk(const char *diskFile, long diskSize) {
     emptyInode.fragmentsCount = 0;
     emptyInode.isUsed = 0;
 
-    fseek(fp, sb.inodeTableOffset, SEEK_SET);
+    fseek(fp, superBlock.inodeTableOffset, SEEK_SET);
     for (int i = 0; i < inodeCount; i++) {
         fwrite(&emptyInode, sizeof(emptyInode), 1, fp);
     }
 
     unsigned char zero = 0;
-    fseek(fp, sb.blockBitmapOffset, SEEK_SET);
+    fseek(fp, superBlock.blockBitmapOffset, SEEK_SET);
     for (int i = 0; i < blockCount; i++) {
         fwrite(&zero, 1, 1, fp);
     }
@@ -173,7 +173,7 @@ int formatDisk(const char *diskFile, long diskSize) {
     return 0;
 }
 
-int allocateExtents(unsigned char *blockMap, SuperBlock *sb, Inode *ino, int blocksNeeded) {
+int allocateFragments(unsigned char *blockMap, SuperBlock *superBlock, Inode *ino, int blocksNeeded) {
     if (blocksNeeded <= 0) return 0; 
 
     int allocated = 0;
@@ -182,14 +182,13 @@ int allocateExtents(unsigned char *blockMap, SuperBlock *sb, Inode *ino, int blo
         ino->fragments[i].startBlock = -1;
         ino->fragments[i].blockCount = 0;
     }
-
     int fragIndex = 0;
     int i = 0;
-    while (i < sb->blockCount && allocated < blocksNeeded) {
+    while (i < superBlock->blockCount && allocated < blocksNeeded) {
         if (blockMap[i] == 0) {
             int start = i;
             int length = 0;
-            while (i < sb->blockCount && blockMap[i] == 0 && allocated + length < blocksNeeded) {
+            while (i < superBlock->blockCount && blockMap[i] == 0 && allocated + length < blocksNeeded) {
                 i++;
                 length++;
             }
@@ -204,17 +203,13 @@ int allocateExtents(unsigned char *blockMap, SuperBlock *sb, Inode *ino, int blo
             }
 
             allocated += length;
-        } else {
-            i++;
-        }
+        } else i++;
     }
-
     if (allocated < blocksNeeded) {
         return -1;
     }
-
     ino->fragmentsCount = fragIndex;
-    sb->freeBlocks -= allocated;
+    superBlock->freeBlocks -= allocated;
     return 0;
 }
 
@@ -233,18 +228,18 @@ int copyIn(const char *diskName, const char *srcFile, const char *destName) {
         fprintf(stderr, "Nie można otworzyć dysku %s\n", diskName);
         return -1;
     }
-    SuperBlock sb;
-    if (readSuperBlock(fp, &sb) < 0) {
+    SuperBlock superBlock;
+    if (readSuperBlock(fp, &superBlock) < 0) {
         fclose(fp);
         fclose(fSrc);
         return -1;
     }
-    unsigned char *blockMap = calloc(sb.blockCount, 1);
-    loadBlockMap(fp, &sb, blockMap);
+    unsigned char *blockMap = calloc(superBlock.blockCount, 1);
+    loadBlockMap(fp, &superBlock, blockMap);
     int freeInodeIdx = -1;
-    for (int i = 0; i < sb.inodeCount; i++) {
+    for (int i = 0; i < superBlock.inodeCount; i++) {
         Inode temp;
-        if (readInode(fp, &sb, i, &temp) == 0) {
+        if (readInode(fp, &superBlock, i, &temp) == 0) {
             if (temp.isUsed == 0) {
                 freeInodeIdx = i;
                 break;
@@ -267,8 +262,13 @@ int copyIn(const char *diskName, const char *srcFile, const char *destName) {
     newIno.fileSize = fileSize;
     newIno.fragmentsCount = 0;
     int blocksNeeded = (fileSize + BLOCK_SIZE - 1) / BLOCK_SIZE;
-    if (allocateExtents(blockMap, &sb, &newIno, blocksNeeded) < 0) {
-        fprintf(stderr, "Brak miejsca na dysku albo za dużo fragmentów.\n");
+    if (allocateFragments(blockMap, &superBlock, &newIno, blocksNeeded) < 0) {
+        if (superBlock.freeBlocks < blocksNeeded) {
+            printf("Brak miejsca na dysku (pozostale miejsce = %ld, potrzebne miejsce = %ld).\n", 
+                   (long)superBlock.freeBlocks * BLOCK_SIZE, fileSize);
+        } else {
+            fprintf(stderr, "Brak miejsca na dysku albo za dużo fragmentów.\n");
+        }
         free(blockMap);
         fclose(fp);
         fclose(fSrc);
@@ -286,7 +286,7 @@ int copyIn(const char *diskName, const char *srcFile, const char *destName) {
             size_t r = fread(buf, 1, toRead, fSrc);
             if (r != toRead) {
             }
-            long off = getBlockOffset(&sb, start + b);
+            long off = getBlockOffset(&superBlock, start + b);
             fseek(fp, off, SEEK_SET);
             fwrite(buf, 1, toRead, fp);
 
@@ -296,10 +296,10 @@ int copyIn(const char *diskName, const char *srcFile, const char *destName) {
     }
 
     free(buf);
-    writeInode(fp, &sb, freeInodeIdx, &newIno);
+    writeInode(fp, &superBlock, freeInodeIdx, &newIno);
 
-    saveBlockMap(fp, &sb, blockMap);
-    writeSuperBlock(fp, &sb);
+    saveBlockMap(fp, &superBlock, blockMap);
+    writeSuperBlock(fp, &superBlock);
 
     free(blockMap);
     fclose(fp);
@@ -315,15 +315,15 @@ int copyOut(const char *diskName, const char *fileName, const char *outFile) {
         fprintf(stderr, "Nie można otworzyć dysku %s\n", diskName);
         return -1;
     }
-    SuperBlock sb;
-    if (readSuperBlock(fp, &sb) < 0) {
+    SuperBlock superBlock;
+    if (readSuperBlock(fp, &superBlock) < 0) {
         fclose(fp);
         return -1;
     }
     int foundInode = -1;
     Inode ino;
-    for (int i = 0; i < sb.inodeCount; i++) {
-        if (readInode(fp, &sb, i, &ino) == 0) {
+    for (int i = 0; i < superBlock.inodeCount; i++) {
+        if (readInode(fp, &superBlock, i, &ino) == 0) {
             if (ino.isUsed == 1) {
                 if (strncmp(ino.fileName, fileName, MAX_NAME_LEN) == 0) {
                     foundInode = i;
@@ -352,7 +352,7 @@ int copyOut(const char *diskName, const char *fileName, const char *outFile) {
         for (int b = 0; b < cnt; b++) {
             if (bytesLeft <= 0) break;
             size_t toRead = (bytesLeft > BLOCK_SIZE) ? BLOCK_SIZE : bytesLeft;
-            long off = getBlockOffset(&sb, start + b);
+            long off = getBlockOffset(&superBlock, start + b);
             fseek(fp, off, SEEK_SET);
             size_t rr = fread(buf, 1, toRead, fp);
             fwrite(buf, 1, rr, fOut);
@@ -373,15 +373,15 @@ int removeFile(const char *diskName, const char *fileName) {
         fprintf(stderr, "Nie można otworzyć %s\n", diskName);
         return -1;
     }
-    SuperBlock sb;
-    if (readSuperBlock(fp, &sb) < 0) {
+    SuperBlock superBlock;
+    if (readSuperBlock(fp, &superBlock) < 0) {
         fclose(fp);
         return -1;
     }
     int foundInode = -1;
     Inode ino;
-    for (int i = 0; i < sb.inodeCount; i++) {
-        if (readInode(fp, &sb, i, &ino) == 0) {
+    for (int i = 0; i < superBlock.inodeCount; i++) {
+        if (readInode(fp, &superBlock, i, &ino) == 0) {
             if (ino.isUsed == 1) {
                 if (strncmp(ino.fileName, fileName, MAX_NAME_LEN) == 0) {
                     foundInode = i;
@@ -395,24 +395,24 @@ int removeFile(const char *diskName, const char *fileName) {
         fclose(fp);
         return -1;
     }
-    unsigned char *blockMap = calloc(sb.blockCount, 1);
-    loadBlockMap(fp, &sb, blockMap);
+    unsigned char *blockMap = calloc(superBlock.blockCount, 1);
+    loadBlockMap(fp, &superBlock, blockMap);
 
     int totalBlocksFreed = 0;
     for (int f = 0; f < ino.fragmentsCount; f++) {
         int start = ino.fragments[f].startBlock;
         int cnt   = ino.fragments[f].blockCount;
         for (int b = start; b < start + cnt; b++) {
-            blockMap[b] = 0; // wolny
+            blockMap[b] = 0;
         }
         totalBlocksFreed += cnt;
     }
-    sb.freeBlocks += totalBlocksFreed;
+    superBlock.freeBlocks += totalBlocksFreed;
     Inode empty;
     memset(&empty, 0, sizeof(empty));
-    writeInode(fp, &sb, foundInode, &empty);
-    saveBlockMap(fp, &sb, blockMap);
-    writeSuperBlock(fp, &sb);
+    writeInode(fp, &superBlock, foundInode, &empty);
+    saveBlockMap(fp, &superBlock, blockMap);
+    writeSuperBlock(fp, &superBlock);
 
     free(blockMap);
     fclose(fp);
@@ -425,15 +425,15 @@ int listAllFiles(const char *diskName) {
         fprintf(stderr, "Nie można otworzyć %s\n", diskName);
         return -1;
     }
-    SuperBlock sb;
-    if (readSuperBlock(fp, &sb) < 0) {
+    SuperBlock superBlock;
+    if (readSuperBlock(fp, &superBlock) < 0) {
         fclose(fp);
         return -1;
     }
     printf("Katalog:\n");
-    for (int i = 0; i < sb.inodeCount; i++) {
+    for (int i = 0; i < superBlock.inodeCount; i++) {
         Inode ino;
-        if (readInode(fp, &sb, i, &ino) == 0) {
+        if (readInode(fp, &superBlock, i, &ino) == 0) {
             if (ino.isUsed == 1) {
                 printf("  inode=%d, nazwa='%s', rozmiar=%d bajtów, fragmentsCount=%d\n",
                        i, ino.fileName, ino.fileSize, ino.fragmentsCount);
@@ -450,15 +450,15 @@ int listFiles(const char *diskName) {
         fprintf(stderr, "Nie można otworzyć %s\n", diskName);
         return -1;
     }
-    SuperBlock sb;
-    if (readSuperBlock(fp, &sb) < 0) {
+    SuperBlock superBlock;
+    if (readSuperBlock(fp, &superBlock) < 0) {
         fclose(fp);
         return -1;
     }
     printf("Katalog:\n");
-    for (int i = 0; i < sb.inodeCount; i++) {
+    for (int i = 0; i < superBlock.inodeCount; i++) {
         Inode ino;
-        if (readInode(fp, &sb, i, &ino) == 0) {
+        if (readInode(fp, &superBlock, i, &ino) == 0) {
             if (ino.isUsed == 1) {
                 if (ino.fileName[0] != '.') {
                     printf("  inode=%d, nazwa='%s', rozmiar=%d bajtów, fragmentsCount=%d\n",
@@ -476,37 +476,87 @@ int printMap(const char *diskName) {
         fprintf(stderr, "Nie można otworzyć pliku dysku\n");
         return -1;
     }
-    SuperBlock sb;
-    if (readSuperBlock(fp, &sb) < 0) {
+    SuperBlock superBlock;
+    if (readSuperBlock(fp, &superBlock) < 0) {
         fclose(fp);
         return -1;
     }
 
     printf("STRUKTURA DYSKU '%s':\n", diskName);
     printf("Offset superbloku: %ld\n", 0L);
-    printf("Offset tabeli i-węzłów: %d\n", sb.inodeTableOffset);
-    printf("Offset bitmapy bloków: %d\n", sb.blockBitmapOffset);
-    printf("Offset danych: %d\n", sb.dataOffset);
+    printf("Offset tabeli i-węzłów: %d\n", superBlock.inodeTableOffset);
+    printf("Offset bitmapy bloków: %d\n", superBlock.blockBitmapOffset);
+    printf("Offset danych: %d\n", superBlock.dataOffset);
 
-    unsigned char *blockMap = calloc(sb.blockCount, 1);
-    loadBlockMap(fp, &sb, blockMap);
-    printf("Mapa bloków:\n");
-    int start = 0;
-    int current = blockMap[0];
-    for (int i = 1; i < sb.blockCount; i++) {
-        if ((int)blockMap[i] != current) {
-            printf("Bloki [%d..%d] -> %s\n", start, i - 1, (current == 0) ? "WOLNE" : "ZAJĘTE");
-            start = i;
-            current = blockMap[i];
+    unsigned char *blockMap = calloc(superBlock.blockCount, 1);
+    loadBlockMap(fp, &superBlock, blockMap);
+
+    Inode *inodes = calloc(superBlock.inodeCount, sizeof(Inode));
+    for (int i = 0; i < superBlock.inodeCount; i++) {
+        readInode(fp, &superBlock, i, &inodes[i]);
+    }
+
+    int *ownerOfBlock = malloc(superBlock.blockCount * sizeof(int));
+    for (int b = 0; b < superBlock.blockCount; b++) {
+        ownerOfBlock[b] = -1; 
+    }
+    for (int i = 0; i < superBlock.inodeCount; i++) {
+        if (inodes[i].isUsed == 1) {
+            for (int f = 0; f < inodes[i].fragmentsCount; f++) {
+                int start = inodes[i].fragments[f].startBlock;
+                int cnt   = inodes[i].fragments[f].blockCount;
+                for (int b = start; b < start + cnt; b++) {
+                    ownerOfBlock[b] = i;
+                }
+            }
         }
     }
-    printf("Bloki [%d..%d] -> %s\n", start, sb.blockCount - 1,
-           (current == 0) ? "WOLNE" : "ZAJĘTE");
+    printf("Mapa bloków:\n");
+    int start = 0;
+    int currentState  = blockMap[0];
+    int currentOwner  = ownerOfBlock[0];
+    for (int i = 1; i < superBlock.blockCount; i++) {
+        int st   = blockMap[i];
+        int own  = ownerOfBlock[i];
+        if (st != currentState || own != currentOwner) {
+            if (currentState == 0) {
+                printf("Bloki [%d..%d] -> WOLNE\n", start, i - 1);
+            } else {
+                if (currentOwner >= 0) {
+                    printf("Bloki [%d..%d] -> ZAJĘTE (plik='%s')\n",
+                           start, i - 1, inodes[currentOwner].fileName);
+                } else {
+                    printf("Bloki [%d..%d] -> ZAJĘTE (nieznany plik)\n", start, i - 1);
+                }
+            }
+            start         = i;
+            currentState  = st;
+            currentOwner  = own;
+        }
+    }
+    if (currentState == 0) {
+        printf("Bloki [%d..%d] -> WOLNE\n", start, superBlock.blockCount - 1);
+    } else {
+        if (currentOwner >= 0) {
+            printf("Bloki [%d..%d] -> ZAJĘTE (plik='%s')\n",
+                   start, superBlock.blockCount - 1,
+                   inodes[currentOwner].fileName);
+        } else {
+            printf("Bloki [%d..%d] -> ZAJĘTE (nieznany plik)\n", 
+                   start, superBlock.blockCount - 1);
+        }
+    }
+
+    printf("Wolne przestrzenie: %ld bajtów\n", 
+           (long)superBlock.freeBlocks * BLOCK_SIZE);
 
     free(blockMap);
+    free(ownerOfBlock);
+    free(inodes);
     fclose(fp);
     return 0;
 }
+
 int removeDisk(const char *diskName) {
     if (unlink(diskName) == 0) {
         printf("Plik dysku '%s' usunięty.\n", diskName);
@@ -521,7 +571,7 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, 
             "Użycie: %s <polecenie> [argumenty]\n"
             "Dostępne polecenia:\n"
-            "  create <diskFile> <blockCount>\n"
+            "  create <diskFile> <diskSize>\n"
             "  copyin <diskFile> <srcFile> <destName>\n"
             "  copyout <diskFile> <fileName> <outFile>\n"
             "  ls <diskFile>\n"
