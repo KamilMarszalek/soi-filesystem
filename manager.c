@@ -96,13 +96,19 @@ int formatDisk(const char *diskFile, long diskSize) {
         perror("formatDisk fopen");
         return -1;
     }
-    int inodeCount = MAX_INODES;
     int blockSize = BLOCK_SIZE;
     long blocks = diskSize / blockSize;
     if (blocks < 1) {
         fprintf(stderr, "Za mały rozmiar dysku\n");
         fclose(fp);
         return -1;
+    }
+    int inodeCount = (int)blocks / 16;
+    if (inodeCount > MAX_INODES) {
+        inodeCount = MAX_INODES;
+    }
+    if (inodeCount < 16) {
+        inodeCount = 16;
     }
     size_t superBlockSize = sizeof(SuperBlock);
     size_t inodeTableSize = inodeCount * sizeof(Inode);
@@ -236,6 +242,20 @@ int copyIn(const char *diskName, const char *srcFile, const char *destName) {
     }
     unsigned char *blockMap = calloc(superBlock.blockCount, 1);
     loadBlockMap(fp, &superBlock, blockMap);
+    for (int i = 0; i < superBlock.inodeCount; i++) {
+        Inode tmpIno;
+        if (readInode(fp, &superBlock, i, &tmpIno) == 0) {
+            if (tmpIno.isUsed == 1) {
+                if (strncmp(tmpIno.fileName, destName, MAX_NAME_LEN) == 0) {
+                    fprintf(stderr, "Plik o nazwie '%s' już istnieje na dysku!\n", destName);
+                    free(blockMap);
+                    fclose(fp);
+                    fclose(fSrc);
+                    return -1;
+                }
+            }
+        }
+    }
     int freeInodeIdx = -1;
     for (int i = 0; i < superBlock.inodeCount; i++) {
         Inode temp;
